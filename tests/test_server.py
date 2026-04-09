@@ -7,7 +7,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from mcp.server.fastmcp.exceptions import ToolError
@@ -135,7 +135,7 @@ class TestScreenshotTool:
         with tempfile.TemporaryDirectory() as tmpdir:
             fpath = os.path.join(tmpdir, "sub", "dir", "test.png")
             with patch("mcp_screenshot.server.capture_screen", return_value=png):
-                result = await screenshot(output="file", file_path=fpath)
+                await screenshot(output="file", file_path=fpath)
 
             assert Path(fpath).exists()
 
@@ -331,7 +331,6 @@ class TestMain:
 
     @patch("mcp_screenshot.server.mcp")
     def test_main_strips_debug_flag(self, mock_mcp):
-        import sys as _sys
         from mcp_screenshot.server import main
 
         with patch("sys.argv", ["mcp-screenshot", "--debug"]):
@@ -358,13 +357,9 @@ class TestInitVersion:
 
     def test_version_fallback(self):
         """When package isn't installed, version falls back to dev."""
-        from importlib.metadata import PackageNotFoundError
+        import mcp_screenshot
 
-        with patch("mcp_screenshot.version", side_effect=PackageNotFoundError):
-            # Re-import to trigger fallback
-            import importlib
-            import mcp_screenshot
-
-            # The fallback is set at import time, so we test the existing value
-            # or test the logic directly
-            assert mcp_screenshot.__version__ is not None
+        # The fallback is set at import time, so we verify the existing
+        # value is a string (either real version or "0.0.0-dev")
+        assert mcp_screenshot.__version__ is not None
+        assert isinstance(mcp_screenshot.__version__, str)

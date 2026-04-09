@@ -4,10 +4,10 @@ This server captures screenshots of the user's screen for AI agent analysis.
 visual output, read UI state, check rendering, or identify screen coordinates for
 targeted capture.
 
-**Two-step workflow**:
+**Workflow**:
 1. Call `screenshot()` with no arguments to capture the full screen
-2. Examine the image to identify the region of interest
-3. Call `screenshot(region=[x, y, width, height])` to capture just that area in detail
+2. Examine the image, identify the region of interest, then call
+   `screenshot(region=[x, y, width, height])` to capture just that area in detail
 
 **Coordinate system**: Origin (0, 0) is the top-left corner of the screen.
 The region parameter uses pixel coordinates: [x, y, width, height].

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "mcp-screenshot"
 version = "0.1.0"
-description = "MCP server for AI-agent-driven screen capture — cross-platform, zero external dependencies, structured errors."
+description = "MCP server for AI-agent-driven screen capture — cross-platform, no external binaries required, structured errors."
 readme = "README.md"
 license = {text = "Apache-2.0"}
 authors = [

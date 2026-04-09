@@ -9,8 +9,7 @@ from __future__ import annotations
 import io
 import os
 import platform
-import sys
-from typing import Any
+from typing import Any, NoReturn
 
 import mss as mss_module
 from PIL import Image as PILImage

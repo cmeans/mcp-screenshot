@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 import json
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from mcp.server.fastmcp.exceptions import ToolError
@@ -21,7 +21,6 @@ from mcp_screenshot.capture import (
     _validate_region,
     capture_screen,
 )
-from mcp_screenshot.errors import ScreenshotError
 
 
 def _make_mock_sct(monitors=None, grab_size=(100, 50)):

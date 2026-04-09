@@ -53,8 +53,9 @@ jobs:
             gh pr edit "$PR" --repo "$REPO" --add-label "Awaiting CI"
           fi
 
-          # If QA was actively reviewing, notify via comment
+          # If QA was actively reviewing, add QA Invalidated and notify
           if [ "$HAD_QA_ACTIVE" = true ]; then
+            gh pr edit "$PR" --repo "$REPO" --add-label "QA Invalidated"
             gh pr comment "$PR" --repo "$REPO" \
               --body "New commits pushed while QA was active. QA review invalidated — resetting to Awaiting CI."
           fi
@@ -106,7 +107,7 @@ jobs:
   on-label:
     if: >-
       github.event.action == 'labeled'
-      && contains(fromJSON('["Ready for QA","QA Active","Dev Active","Ready for QA Signoff","QA Failed","QA Approved"]'), github.event.label.name)
+      && contains(fromJSON('["Ready for QA","QA Active","Dev Active","Ready for QA Signoff","QA Failed","QA Approved","QA Invalidated"]'), github.event.label.name)
     runs-on: ubuntu-latest
     steps:
       - name: Clean up stale labels
@@ -146,6 +147,11 @@ jobs:
               remove_if_present "Ready for QA Signoff"
               ;;
             "QA Approved")
+              remove_if_present "Ready for QA Signoff"
+              remove_if_present "QA Invalidated"
+              ;;
+            "QA Invalidated")
+              remove_if_present "QA Active"
               remove_if_present "Ready for QA Signoff"
               ;;
           esac

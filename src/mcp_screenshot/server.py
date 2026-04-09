@@ -1,7 +1,7 @@
 """Screenshot MCP Server.
 
 MCP server that captures screenshots of the screen or specific regions
-for AI agent visual analysis. Cross-platform, zero external dependencies.
+for AI agent visual analysis. Cross-platform, no external binaries required.
 """
 
 from __future__ import annotations
