@@ -1,3 +1,11 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/cmeans/mcp-screenshot/main/src/mcp_screenshot/icons/mcp-screenshot-icon-chart-dark.svg" width="128">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/cmeans/mcp-screenshot/main/src/mcp_screenshot/icons/mcp-screenshot-icon-chart-light.svg" width="128">
+    <img src="https://raw.githubusercontent.com/cmeans/mcp-screenshot/main/src/mcp_screenshot/icons/mcp-screenshot-icon-chart-light.svg" alt="mcp-screenshot logo" width="128">
+  </picture>
+</p>
+
 # mcp-screenshot
 
 [![PyPI version](https://img.shields.io/pypi/v/mcp-screenshot)](https://pypi.org/project/mcp-screenshot/)
@@ -143,3 +151,9 @@ uv run pytest --cov
 ## License
 
 [Apache 2.0](LICENSE)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/cmeans/mcp-screenshot/main/src/mcp_screenshot/icons/mcp-screenshot-icon-chart-dark.svg" width="24">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/cmeans/mcp-screenshot/main/src/mcp_screenshot/icons/mcp-screenshot-icon-chart-light.svg" width="24">
+  <img src="https://raw.githubusercontent.com/cmeans/mcp-screenshot/main/src/mcp_screenshot/icons/mcp-screenshot-icon-chart-light.svg" alt="" width="24" align="top">
+</picture> &copy; 2026 Chris Means

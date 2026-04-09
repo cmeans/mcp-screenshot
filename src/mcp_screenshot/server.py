@@ -56,7 +56,7 @@ def _load_instruction(name: str) -> str:
 def _load_icons() -> list[Icon]:
     """Return Icon objects pointing to hosted SVGs on GitHub."""
     icons = []
-    theme_map = {"light": "mcp-screenshot-icon-chart.svg", "dark": "mcp-screenshot-icon-diagram.svg"}
+    theme_map = {"light": "mcp-screenshot-icon-chart-light.svg", "dark": "mcp-screenshot-icon-chart-dark.svg"}
     for theme, filename in theme_map.items():
         icons.append(Icon(
             src=f"{_ICON_BASE_URL}/{filename}",
