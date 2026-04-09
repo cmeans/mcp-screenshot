@@ -1,0 +1,65 @@
+name: Platform Test Report
+description: Report results from testing with an MCP client or platform
+labels: ["testing", "platform-compat"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us build the compatibility matrix! Report what works (or doesn't) on your setup.
+
+  - type: dropdown
+    id: client
+    attributes:
+      label: MCP Client
+      options:
+        - Claude Desktop
+        - Claude Code
+        - Claude.ai (web/mobile)
+        - Cursor
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: input
+    id: client_version
+    attributes:
+      label: Client version
+      description: Version or build number if known
+      placeholder: "e.g., Claude Desktop 1.2.3"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Operating System
+      options:
+        - macOS
+        - Linux (X11)
+        - Linux (Wayland / XWayland)
+        - Windows
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: features
+    attributes:
+      label: What worked?
+      options:
+        - label: "Tool visible to the client"
+        - label: "Full screen capture returns image"
+        - label: "Region capture works"
+        - label: "Multi-monitor selection works"
+        - label: "Auto-crop works"
+        - label: "File output saves correctly"
+        - label: "Clipboard output works"
+        - label: "Structured errors returned on failure"
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Anything else — quirks, workarounds, screenshots, error JSON.
+    validations:
+      required: false

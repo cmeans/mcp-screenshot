@@ -1,0 +1,80 @@
+name: Bug Report
+description: Report something that isn't working correctly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please fill in as much as you can.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `pip show mcp-screenshot` or commit hash
+      placeholder: "0.1.0 or abc1234"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS
+        - Linux (X11)
+        - Linux (Wayland / XWayland)
+        - Windows
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: client
+    attributes:
+      label: MCP Client
+      options:
+        - Claude Desktop
+        - Claude Code
+        - Claude.ai (web/mobile)
+        - Cursor
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python Version
+      placeholder: "3.13"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug and what you expected to happen instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce this?
+      placeholder: |
+        1. Configure mcp-screenshot in ...
+        2. Call screenshot with ...
+        3. See error ...
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or error output
+      description: Paste any error messages, structured error JSON, or server logs. Enable debug with MCP_SCREENSHOT_DEBUG=1.
+      render: shell
+    validations:
+      required: false
