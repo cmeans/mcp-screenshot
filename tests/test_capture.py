@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,14 +14,17 @@ from PIL import Image as PILImage
 from mcp_screenshot.capture import (
     VALID_OUTPUTS,
     _auto_crop_image,
+    _capture_wayland_portal,
     _check_display_available,
     _detect_platform,
     _handle_capture_error,
+    _is_wayland,
     _validate_monitor,
     _validate_output,
     _validate_region,
     capture_screen,
 )
+from mcp_screenshot.errors import ScreenshotError
 
 
 def _make_mock_sct(monitors=None, grab_size=(100, 50)):
@@ -317,9 +321,10 @@ class TestCaptureScreen:
         error = json.loads(str(exc_info.value))["error"]
         assert error["code"] == "monitor_not_found"
 
+    @patch("mcp_screenshot.capture._is_wayland", return_value=False)
     @patch("mcp_screenshot.capture._check_display_available")
     @patch("mcp_screenshot.capture.mss_module")
-    def test_mss_exception_becomes_structured_error(self, mock_mss_module, mock_check_display):
+    def test_mss_exception_becomes_structured_error(self, mock_mss_module, mock_check_display, mock_wayland):
         sct = _make_mock_sct()
         sct.grab.side_effect = RuntimeError("XGetImage failed")
         mock_mss_module.mss.return_value = sct
@@ -383,3 +388,148 @@ class TestHandleCaptureError:
         error = json.loads(str(exc_info.value))["error"]
         assert error["code"] == "capture_failed"
         assert error["retryable"] is True
+
+
+class TestIsWayland:
+    def test_wayland_set(self):
+        with patch.dict("os.environ", {"WAYLAND_DISPLAY": "wayland-0"}):
+            assert _is_wayland() is True
+
+    def test_wayland_empty(self):
+        with patch.dict("os.environ", {"WAYLAND_DISPLAY": ""}, clear=False):
+            assert _is_wayland() is False
+
+    def test_wayland_unset(self):
+        env = os.environ.copy()
+        env.pop("WAYLAND_DISPLAY", None)
+        with patch.dict("os.environ", env, clear=True):
+            assert _is_wayland() is False
+
+
+class TestCaptureWaylandPortal:
+    def _make_fake_png(self, path):
+        """Create a minimal PNG file at the given path."""
+        img = PILImage.new("RGB", (100, 100), (50, 100, 150))
+        img.save(path, format="PNG")
+
+    @patch("mcp_screenshot.capture.subprocess.run")
+    def test_portal_success(self, mock_run, tmp_path):
+        mock_run.return_value = MagicMock(returncode=0, stdout="(objectpath '/req/1',)", stderr="")
+
+        # Create a fake screenshot file
+        fake_png = tmp_path / "Screenshot.png"
+        self._make_fake_png(fake_png)
+
+        with patch("mcp_screenshot.capture._GNOME_SCREENSHOT_DIR", tmp_path):
+            # File already exists before call — simulate by setting mtime to future
+            import time
+            os.utime(fake_png, (time.time() + 1, time.time() + 1))
+
+            img = _capture_wayland_portal()
+
+        assert isinstance(img, PILImage.Image)
+        assert img.size == (100, 100)
+
+    @patch("mcp_screenshot.capture.subprocess.run")
+    def test_portal_gdbus_not_found(self, mock_run):
+        mock_run.side_effect = FileNotFoundError("gdbus")
+
+        with pytest.raises(ScreenshotError, match="gdbus not found"):
+            _capture_wayland_portal()
+
+    @patch("mcp_screenshot.capture.subprocess.run")
+    def test_portal_timeout(self, mock_run):
+        import subprocess as sp
+        mock_run.side_effect = sp.TimeoutExpired(cmd="gdbus", timeout=10)
+
+        with pytest.raises(ScreenshotError, match="timed out"):
+            _capture_wayland_portal()
+
+    @patch("mcp_screenshot.capture.subprocess.run")
+    def test_portal_failure(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="method not found")
+
+        with pytest.raises(ScreenshotError, match="Portal screenshot failed"):
+            _capture_wayland_portal()
+
+    @patch("mcp_screenshot.capture._PORTAL_TIMEOUT", 0.5)
+    @patch("mcp_screenshot.capture.subprocess.run")
+    def test_portal_no_file_appears(self, mock_run, tmp_path):
+        mock_run.return_value = MagicMock(returncode=0, stdout="(objectpath '/req/1',)", stderr="")
+
+        with patch("mcp_screenshot.capture._GNOME_SCREENSHOT_DIR", tmp_path):
+            with pytest.raises(ScreenshotError, match="no file appeared"):
+                _capture_wayland_portal()
+
+
+class TestCaptureScreenWaylandFallback:
+    """Test that capture_screen falls back to portal on Wayland when mss fails."""
+
+    @patch("mcp_screenshot.capture._capture_wayland_portal")
+    @patch("mcp_screenshot.capture._is_wayland", return_value=True)
+    @patch("mcp_screenshot.capture._check_display_available")
+    @patch("mcp_screenshot.capture.mss_module")
+    def test_fallback_on_mss_failure(self, mock_mss, mock_check, mock_wayland, mock_portal):
+        # mss fails
+        sct = _make_mock_sct()
+        sct.grab.side_effect = RuntimeError("XGetImage() failed")
+        mock_mss.mss.return_value = sct
+
+        # Portal succeeds
+        fake_img = PILImage.new("RGB", (200, 200), (50, 100, 150))
+        mock_portal.return_value = fake_img
+
+        result = capture_screen()
+
+        assert isinstance(result, bytes)
+        mock_portal.assert_called_once()
+
+    @patch("mcp_screenshot.capture._capture_wayland_portal")
+    @patch("mcp_screenshot.capture._is_wayland", return_value=True)
+    @patch("mcp_screenshot.capture._check_display_available")
+    @patch("mcp_screenshot.capture.mss_module")
+    def test_fallback_with_region_crops(self, mock_mss, mock_check, mock_wayland, mock_portal):
+        sct = _make_mock_sct()
+        sct.grab.side_effect = RuntimeError("XGetImage() failed")
+        mock_mss.mss.return_value = sct
+
+        fake_img = PILImage.new("RGB", (1920, 1080), (50, 100, 150))
+        mock_portal.return_value = fake_img
+
+        result = capture_screen(region=[100, 100, 200, 200])
+
+        assert isinstance(result, bytes)
+        # Verify the output is cropped to region size
+        out_img = PILImage.open(io.BytesIO(result))
+        assert out_img.size == (200, 200)
+
+    @patch("mcp_screenshot.capture._capture_wayland_portal")
+    @patch("mcp_screenshot.capture._is_wayland", return_value=True)
+    @patch("mcp_screenshot.capture._check_display_available")
+    @patch("mcp_screenshot.capture.mss_module")
+    def test_fallback_portal_also_fails(self, mock_mss, mock_check, mock_wayland, mock_portal):
+        sct = _make_mock_sct()
+        sct.grab.side_effect = RuntimeError("XGetImage() failed")
+        mock_mss.mss.return_value = sct
+
+        mock_portal.side_effect = RuntimeError("portal broken")
+
+        with pytest.raises(ToolError) as exc_info:
+            capture_screen()
+        error = json.loads(str(exc_info.value))["error"]
+        assert error["code"] == "capture_failed"
+        assert "mss" in error["message"]
+        assert "Portal" in error["message"]
+
+    @patch("mcp_screenshot.capture._is_wayland", return_value=False)
+    @patch("mcp_screenshot.capture._check_display_available")
+    @patch("mcp_screenshot.capture.mss_module")
+    def test_no_fallback_without_wayland(self, mock_mss, mock_check, mock_wayland):
+        sct = _make_mock_sct()
+        sct.grab.side_effect = RuntimeError("XGetImage failed")
+        mock_mss.mss.return_value = sct
+
+        with pytest.raises(ToolError) as exc_info:
+            capture_screen()
+        error = json.loads(str(exc_info.value))["error"]
+        assert error["code"] == "capture_failed"

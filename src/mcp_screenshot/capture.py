@@ -7,8 +7,12 @@ server.py stays clean and testable.
 from __future__ import annotations
 
 import io
+import logging
 import os
 import platform
+import subprocess
+import time
+from pathlib import Path
 from typing import Any, NoReturn
 
 import mss as mss_module
@@ -24,7 +28,15 @@ from .errors import (
     _error_response,
 )
 
+logger = logging.getLogger(__name__)
+
 VALID_OUTPUTS = ["base64", "file", "clipboard"]
+
+# Portal screenshot timeout in seconds
+_PORTAL_TIMEOUT = 8
+
+# Where GNOME saves portal screenshots
+_GNOME_SCREENSHOT_DIR = Path.home() / "Pictures" / "Screenshots"
 
 
 def _detect_platform() -> dict[str, Any]:
@@ -40,6 +52,11 @@ def _detect_platform() -> dict[str, Any]:
         info["wayland_display"] = os.environ.get("WAYLAND_DISPLAY")
         info["xdg_session_type"] = os.environ.get("XDG_SESSION_TYPE")
     return info
+
+
+def _is_wayland() -> bool:
+    """Check if we're running under Wayland."""
+    return bool(os.environ.get("WAYLAND_DISPLAY"))
 
 
 def _check_display_available() -> None:
@@ -156,12 +173,100 @@ def _auto_crop_image(img: PILImage.Image) -> PILImage.Image:
     return img.crop(bbox)
 
 
+def _capture_wayland_portal() -> PILImage.Image:
+    """Capture screenshot via xdg-desktop-portal on Wayland.
+
+    Uses gdbus to call the portal Screenshot API, then watches the
+    screenshot directory for a new file. This works on GNOME, KDE,
+    and other desktop environments that implement the portal.
+
+    Returns:
+        Pillow Image of the captured screenshot.
+
+    Raises:
+        ScreenshotError: If the portal call fails or no screenshot appears.
+    """
+    # Record existing files before the call
+    screenshot_dir = _GNOME_SCREENSHOT_DIR
+    screenshot_dir.mkdir(parents=True, exist_ok=True)
+
+    existing = set(screenshot_dir.iterdir())
+    before_time = time.time()
+
+    # Call the portal
+    try:
+        result = subprocess.run(
+            [
+                "gdbus", "call", "--session",
+                "--dest", "org.freedesktop.portal.Desktop",
+                "--object-path", "/org/freedesktop/portal/desktop",
+                "--method", "org.freedesktop.portal.Screenshot.Screenshot",
+                "", '{"interactive": <false>}',
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except FileNotFoundError:
+        raise ScreenshotError(
+            "gdbus not found. Install glib2 or use an X11 session."
+        )
+    except subprocess.TimeoutExpired:
+        raise ScreenshotError("Portal screenshot request timed out.")
+
+    if result.returncode != 0:
+        raise ScreenshotError(
+            f"Portal screenshot failed: {result.stderr.strip()}"
+        )
+
+    logger.debug("Portal call succeeded: %s", result.stdout.strip())
+
+    # Watch for a new file in the screenshot directory
+    deadline = time.time() + _PORTAL_TIMEOUT
+    new_file = None
+
+    while time.time() < deadline:
+        current = set(screenshot_dir.iterdir())
+        new_files = current - existing
+
+        # Also check for files modified after our call
+        if not new_files:
+            for f in current:
+                if f.stat().st_mtime > before_time and f.suffix.lower() == ".png":
+                    new_files = {f}
+                    break
+
+        if new_files:
+            # Take the most recent one
+            new_file = max(new_files, key=lambda f: f.stat().st_mtime)
+            break
+
+        time.sleep(0.3)
+
+    if new_file is None:
+        raise ScreenshotError(
+            "Portal screenshot was requested but no file appeared. "
+            "The desktop environment may have denied the request silently. "
+            "Try adding the MCP server's terminal to the allowed screenshot list."
+        )
+
+    logger.debug("Portal screenshot saved to: %s", new_file)
+
+    # Read and return as Pillow Image
+    img = PILImage.open(new_file)
+    img.load()  # Force read before we might delete
+    return img
+
+
 def capture_screen(
     region: list[int] | None = None,
     monitor: int = 0,
     auto_crop: bool = False,
 ) -> bytes:
     """Capture screen and return PNG bytes.
+
+    On Linux Wayland, automatically falls back to the xdg-desktop-portal
+    screenshot API when mss (X11-based) fails.
 
     Args:
         region: Optional [x, y, width, height] for partial capture.
@@ -176,6 +281,10 @@ def capture_screen(
     """
     _check_display_available()
 
+    img = None
+    mss_error = None
+
+    # Try mss first (works on X11, macOS, Windows)
     try:
         with mss_module.mss() as sct:
             # Validate monitor index
@@ -196,7 +305,47 @@ def capture_screen(
     except (ScreenshotError, ToolError):
         raise
     except Exception as e:
-        _handle_capture_error(e)
+        mss_error = e
+
+    # Wayland fallback: if mss failed and we're on Wayland, try the portal
+    if img is None and mss_error is not None:
+        if _is_wayland():
+            logger.debug(
+                "mss failed on Wayland (%s), falling back to portal API",
+                mss_error,
+            )
+            try:
+                img = _capture_wayland_portal()
+
+                # If a region was requested, crop the portal screenshot
+                if region is not None:
+                    _validate_region(region)
+                    x, y, w, h = region
+                    img = img.crop((x, y, x + w, y + h))
+
+            except ScreenshotError:
+                raise
+            except Exception as e:
+                # Portal also failed — report both errors
+                _error_response(
+                    "capture_failed",
+                    f"Screen capture failed. "
+                    f"mss (X11): {mss_error}. "
+                    f"Portal (Wayland): {e}.",
+                    retryable=True,
+                    suggestion="Check that a display server is running and you have the necessary permissions.",
+                )
+        else:
+            # Not Wayland — report the mss error directly
+            _handle_capture_error(mss_error)
+
+    if img is None:
+        _error_response(
+            "capture_failed",
+            "Screen capture returned no image.",
+            retryable=True,
+            suggestion="Check that a display server is running and you have the necessary permissions.",
+        )
 
     if auto_crop:
         img = _auto_crop_image(img)
